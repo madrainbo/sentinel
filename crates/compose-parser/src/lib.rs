@@ -10,6 +10,7 @@ use fact_model::{
     sha256_prefixed, AttrValue, Entity, EntityKind, FactModel, Origin, Provenance, Relation,
     RelationKind, SourceDescriptor,
 };
+use yaml_rust2::yaml::Hash as YamlHash;
 use yaml_rust2::{Yaml, YamlLoader};
 
 pub const PARSER_VERSION: &str = "0.1.0";
@@ -83,7 +84,10 @@ pub fn try_parse(input: &str) -> Result<FactModel, String> {
         if let Some(services) = doc["services"].as_hash() {
             for (name_y, svc) in services {
                 if let Some(name) = name_y.as_str() {
-                    parse_service(&mut b, name, svc);
+                    // Resolve YAML merge keys (`<<`) so anchored services are
+                    // assessed with their inherited keys.
+                    let merged = merge_anchors(svc);
+                    parse_service(&mut b, name, &merged);
                 }
             }
         }
@@ -99,6 +103,36 @@ pub fn try_parse(input: &str) -> Result<FactModel, String> {
         entities: b.entities,
         relations: b.relations,
     })
+}
+
+/// Resolve YAML merge keys (`<<: *anchor` or `<<: [*a, *b]`) into a flat hash.
+/// Explicit keys win over merged ones; merge sources are resolved recursively.
+fn merge_anchors(node: &Yaml) -> Yaml {
+    let h = match node.as_hash() {
+        Some(h) => h,
+        None => return node.clone(),
+    };
+    let mut out = YamlHash::new();
+    if let Some(mv) = h.get(&Yaml::String("<<".to_string())) {
+        let sources: Vec<&Yaml> = match mv {
+            Yaml::Array(arr) => arr.iter().collect(),
+            other => vec![other],
+        };
+        for s in sources {
+            if let Some(sh) = merge_anchors(s).into_hash() {
+                for (k, v) in sh {
+                    out.insert(k, v);
+                }
+            }
+        }
+    }
+    for (k, v) in h {
+        if k.as_str() == Some("<<") {
+            continue;
+        }
+        out.insert(k.clone(), v.clone());
+    }
+    Yaml::Hash(out)
 }
 
 fn parse_service(b: &mut Builder, name: &str, svc: &Yaml) {
@@ -516,6 +550,19 @@ mod tests {
         let a = parse(yaml).model_hash();
         let b = parse(yaml).model_hash();
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn merge_keys_are_resolved() {
+        let yaml = "x-base: &base\n  privileged: true\n  image: nginx:1.25\nservices:\n  app:\n    <<: *base\n";
+        let fm = parse(yaml);
+        let svc = fm
+            .entities
+            .iter()
+            .find(|e| e.id == "service:app")
+            .expect("service entity");
+        assert_eq!(svc.attr("privileged").and_then(|v| v.as_bool()), Some(true));
+        assert!(fm.entities.iter().any(|e| e.kind == EntityKind::Image));
     }
 
     #[test]

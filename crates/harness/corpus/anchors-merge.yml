@@ -1,0 +1,11 @@
+# The service inherits `privileged: true` via a YAML merge key (<<). The parser
+# must resolve merge keys, or this Critical is silently missed.
+# EXPECT: Critical PRIVILEGED-CONTAINER
+x-base: &base
+  image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  user: "10001"
+  read_only: true
+  privileged: true
+services:
+  app:
+    <<: *base

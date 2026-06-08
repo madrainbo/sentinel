@@ -1,0 +1,9 @@
+# /etc/localtime is a benign, ubiquitous read-only mount and must NOT be flagged
+# as a sensitive host-path mount. Regression for the benign-path allow-list.
+services:
+  app:
+    image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    user: "10001"
+    read_only: true
+    volumes:
+      - "/etc/localtime:/etc/localtime:ro"

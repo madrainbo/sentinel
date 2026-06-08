@@ -30,6 +30,10 @@ const SENSITIVE_HOST_PATHS: &[&str] = &[
     "/usr", "/bin", "/sbin", "/lib",
 ];
 
+/// Benign exceptions that match a sensitive prefix but are common, low-risk
+/// read-only mounts (e.g. timezone sync). Not flagged by R11.
+const BENIGN_HOST_PATHS: &[&str] = &["/etc/localtime", "/etc/timezone"];
+
 /// A rule backed by a plain function pointer.
 struct FnRule {
     id: &'static str,
@@ -309,6 +313,10 @@ fn r11_sensitive_host_mount(m: &FactModel) -> Vec<Finding> {
             let src = e.attr("source").and_then(|v| v.as_str())?;
             // The Docker socket has its own dedicated rule (R1).
             if src == "/var/run/docker.sock" {
+                return None;
+            }
+            // Benign common mounts (timezone, etc.) are not flagged.
+            if BENIGN_HOST_PATHS.contains(&src) {
                 return None;
             }
             let is_sensitive = SENSITIVE_HOST_PATHS.iter().any(|p| {
