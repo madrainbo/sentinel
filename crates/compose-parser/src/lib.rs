@@ -123,6 +123,15 @@ fn parse_service(b: &mut Builder, name: &str, svc: &Yaml) {
     );
     // runs_as: root | nonroot | unknown
     attrs.insert("runs_as".into(), parse_runs_as(svc));
+    // pid / ipc namespace modes ("" = not set)
+    attrs.insert(
+        "pid_mode".into(),
+        AttrValue::Enum(svc["pid"].as_str().unwrap_or("").to_string()),
+    );
+    attrs.insert(
+        "ipc_mode".into(),
+        AttrValue::Enum(svc["ipc"].as_str().unwrap_or("").to_string()),
+    );
 
     b.entity(Entity {
         id: svc_id.clone(),

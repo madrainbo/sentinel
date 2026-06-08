@@ -1,0 +1,7 @@
+# EXPECT: High HOST-PID-NAMESPACE
+services:
+  app:
+    image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    user: "10001"
+    read_only: true
+    pid: host

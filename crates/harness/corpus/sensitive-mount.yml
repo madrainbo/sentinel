@@ -1,0 +1,8 @@
+# EXPECT: Critical SENSITIVE-HOST-PATH-MOUNT
+services:
+  app:
+    image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    user: "10001"
+    read_only: true
+    volumes:
+      - "/etc:/host-etc:ro"

@@ -12,6 +12,13 @@ const DANGEROUS_CAPS: &[&str] =
     &["SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE", "SYS_MODULE", "DAC_READ_SEARCH"];
 const SENSITIVE_PORTS: &[i64] = &[5432, 3306, 6379, 27017, 9200, 5984, 11211, 2375, 2376];
 
+/// Host paths that should never be bind-mounted into a container (besides the
+/// Docker socket, which has its own dedicated rule R1).
+const SENSITIVE_HOST_PATHS: &[&str] = &[
+    "/", "/etc", "/root", "/proc", "/sys", "/boot", "/dev", "/var/run", "/var/lib/docker",
+    "/usr", "/bin", "/sbin", "/lib",
+];
+
 /// A rule backed by a plain function pointer.
 struct FnRule {
     id: &'static str,
@@ -282,6 +289,68 @@ fn r10_writable_rootfs(m: &FactModel) -> Vec<Finding> {
         .collect()
 }
 
+// --- R11 ------------------------------------------------------------------
+fn r11_sensitive_host_mount(m: &FactModel) -> Vec<Finding> {
+    m.entities
+        .iter()
+        .filter(|e| e.kind == EntityKind::Mount)
+        .filter_map(|e| {
+            let src = e.attr("source").and_then(|v| v.as_str())?;
+            // The Docker socket has its own dedicated rule (R1).
+            if src == "/var/run/docker.sock" {
+                return None;
+            }
+            let is_sensitive = SENSITIVE_HOST_PATHS.iter().any(|p| {
+                src == *p || (*p != "/" && src.starts_with(&format!("{p}/")))
+            }) || src == "/";
+            if !is_sensitive {
+                return None;
+            }
+            let severity = if src == "/" || src == "/etc" || src == "/root" {
+                Severity::Critical
+            } else {
+                Severity::High
+            };
+            Some(finding(
+                "SENSITIVE-HOST-PATH-MOUNT",
+                &["CWE-552", "CWE-668"],
+                severity,
+                &e.id,
+                format!("Sensitive host path '{src}' is bind-mounted into a container — exposes host files to the container"),
+                "Remove the bind mount or scope it to a specific, non-sensitive subdirectory (read-only where possible).",
+            ))
+        })
+        .collect()
+}
+
+// --- R12 ------------------------------------------------------------------
+fn r12_host_pid_ipc(m: &FactModel) -> Vec<Finding> {
+    let mut out = Vec::new();
+    for e in m.entities.iter().filter(|e| e.kind == EntityKind::Service) {
+        if e.attr("pid_mode").and_then(|v| v.as_str()) == Some("host") {
+            out.push(finding(
+                "HOST-PID-NAMESPACE",
+                &["CWE-668", "CIS-Docker-5.15"],
+                Severity::High,
+                &e.id,
+                format!("Service '{}' shares the host PID namespace (pid: host) — can see/signal host processes", svc_name(&e.id)),
+                "Remove 'pid: host'; containers should use their own PID namespace.",
+            ));
+        }
+        if e.attr("ipc_mode").and_then(|v| v.as_str()) == Some("host") {
+            out.push(finding(
+                "HOST-IPC-NAMESPACE",
+                &["CWE-668", "CIS-Docker-5.16"],
+                Severity::High,
+                &e.id,
+                format!("Service '{}' shares the host IPC namespace (ipc: host) — breaks process isolation", svc_name(&e.id)),
+                "Remove 'ipc: host'; containers should use their own IPC namespace.",
+            ));
+        }
+    }
+    out
+}
+
 pub struct SentinelCorePack {
     rules: Vec<Box<dyn Rule>>,
 }
@@ -299,6 +368,8 @@ impl SentinelCorePack {
             Box::new(FnRule { id: "IMAGE-UNPINNED", f: r8_image_unpinned }),
             Box::new(FnRule { id: "CONTAINER-RUNS-AS-ROOT-OR-UNKNOWN", f: r9_runs_as }),
             Box::new(FnRule { id: "WRITABLE-ROOT-FILESYSTEM", f: r10_writable_rootfs }),
+            Box::new(FnRule { id: "SENSITIVE-HOST-PATH-MOUNT", f: r11_sensitive_host_mount }),
+            Box::new(FnRule { id: "HOST-PID-IPC", f: r12_host_pid_ipc }),
         ];
         Self { rules }
     }

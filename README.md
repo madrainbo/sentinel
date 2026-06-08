@@ -56,9 +56,11 @@ runs the **same** `sentinel scan` you run locally — your CI never compiles any
 | Rule | Severity | What it catches |
 |---|---|---|
 | `DOCKER-SOCKET-MOUNT` | Critical | `/var/run/docker.sock` mounted into a container (host root) |
+| `SENSITIVE-HOST-PATH-MOUNT` | Critical/High | bind mount of `/`, `/etc`, `/proc`, `/sys`, … |
 | `PRIVILEGED-CONTAINER` | Critical | `privileged: true` |
 | `DANGEROUS-CAPABILITY` | High | `cap_add` of SYS_ADMIN / NET_ADMIN / SYS_PTRACE / … |
 | `HOST-NETWORK-MODE` | High | `network_mode: host` |
+| `HOST-PID-NAMESPACE` / `HOST-IPC-NAMESPACE` | High | `pid: host` / `ipc: host` (namespace isolation loss) |
 | `WEAK-DEFAULT-CREDENTIAL` | High | secret-like env var set to a weak/default value |
 | `SECRET-IN-ENVIRONMENT` | Medium | secret-like env var with an inline literal value |
 | `SENSITIVE-PORT-PUBLISHED-ALL-IFACES` | Medium | datastore/admin port published on `0.0.0.0` |
