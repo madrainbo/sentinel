@@ -69,8 +69,8 @@ runs the **same** `sentinel scan` you run locally — your CI never compiles any
 | `CONTAINER-RUNS-AS-ROOT-OR-UNKNOWN` | Low | runs as root, or user unspecified |
 | `WRITABLE-ROOT-FILESYSTEM` | Low | `read_only` not set |
 
-> Control mappings (CWE / CIS Docker Benchmark) are shipped as guidance and are being
-> verified against the published benchmarks.
+> Control mappings are documented and verified in **[CONTROLS.md](CONTROLS.md)** — CWE
+> against MITRE, CIS against the Docker Benchmark section numbers.
 
 ## How it works
 

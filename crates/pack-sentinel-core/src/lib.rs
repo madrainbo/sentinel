@@ -1,7 +1,7 @@
 //! sentinel-core pack v0 — Docker Compose security rules R1..R10.
 //!
-//! Spec: `docs/packs/sentinel-core-v0.md`. Each rule is a pure function of the
-//! fact model. Control mappings are best-effort and pending verification.
+//! Each rule is a pure function of the fact model. Control mappings (CWE / CIS
+//! Docker Benchmark) are documented and verified in `CONTROLS.md`.
 
 use engine::{count_severities, Finding, Pack, Rule, Severity, Status, Verdict};
 use fact_model::{AttrValue, EntityKind, FactModel};
@@ -238,7 +238,7 @@ fn r8_image_unpinned(m: &FactModel) -> Vec<Finding> {
             let repo = e.attr("repo").and_then(|v| v.as_str()).unwrap_or("?");
             finding(
                 "IMAGE-UNPINNED",
-                &["CWE-1357", "CWE-1104"],
+                &["CWE-494", "CWE-1357"],
                 Severity::Low,
                 &e.id,
                 format!("Image '{repo}' is not pinned by digest — non-reproducible and a supply-chain risk"),
