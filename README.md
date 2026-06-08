@@ -84,8 +84,9 @@ runs the **same** `sentinel scan` you run locally — your CI never compiles any
 | `CONTAINER-RUNS-AS-ROOT-OR-UNKNOWN` | Low | runs as root, or user unspecified |
 | `WRITABLE-ROOT-FILESYSTEM` | Low | `read_only` not set |
 
-> Control mappings are documented and verified in **[CONTROLS.md](CONTROLS.md)** — CWE
-> against MITRE, CIS against the Docker Benchmark section numbers.
+> Full details for every rule — what it is, why it matters, and how to fix it — are in
+> the **[vulnerability reference (RULES.md)](RULES.md)**. Findings deep-link to it, and
+> SARIF results carry the per-rule `helpUri`. Control mappings: **[CONTROLS.md](CONTROLS.md)**.
 
 ## How it works
 

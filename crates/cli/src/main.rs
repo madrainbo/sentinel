@@ -216,6 +216,9 @@ fn print_text(
         c.info
     );
     println!("digest:  {digest}");
+    if !args.quiet && !findings.is_empty() {
+        println!("reference: https://github.com/madrainbo/sentinel/blob/main/RULES.md");
+    }
 }
 
 fn verify(args: VerifyArgs) -> ExitCode {

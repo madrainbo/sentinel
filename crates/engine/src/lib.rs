@@ -244,6 +244,15 @@ fn sarif_security_severity(sev: Severity) -> &'static str {
     }
 }
 
+/// Deep link to a rule's entry in the public vulnerability reference (RULES.md).
+/// The heading anchor is the lowercased rule id.
+pub fn rule_help_url(rule_id: &str) -> String {
+    format!(
+        "https://github.com/madrainbo/sentinel/blob/main/RULES.md#{}",
+        rule_id.to_lowercase()
+    )
+}
+
 /// Render findings as SARIF 2.1.0 — the format GitHub code scanning ingests
 /// (findings show up in the Security tab and as PR annotations).
 pub fn sarif_json(findings: &[Finding], file_uri: &str) -> Json {
@@ -261,10 +270,7 @@ pub fn sarif_json(findings: &[Finding], file_uri: &str) -> Json {
                 "shortDescription".into(),
                 Json::Obj(vec![("text".into(), Json::Str(f.message.clone()))]),
             ),
-            (
-                "helpUri".into(),
-                Json::Str("https://github.com/madrainbo/sentinel/blob/main/CONTROLS.md".into()),
-            ),
+            ("helpUri".into(), Json::Str(rule_help_url(&f.rule_id))),
             (
                 "properties".into(),
                 Json::Obj(vec![(
