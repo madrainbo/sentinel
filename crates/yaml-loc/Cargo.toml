@@ -1,0 +1,12 @@
+[package]
+name = "yaml-loc"
+version = "0.1.0"
+edition = "2021"
+
+# Source-line index for YAML: maps a dotted/indexed node path (e.g.
+# `services.web.ports[0]`) to its 1-based source line, using yaml-rust2's
+# marked event stream. Shared by the YAML-based parsers so findings can carry a
+# line reference. Deterministic; never panics (malformed input -> partial map).
+
+[dependencies]
+yaml-rust2 = "0.11"

@@ -1,0 +1,12 @@
+# Image referenced by mutable tag instead of digest.
+# EXPECT: Low K8S-IMAGE-UNPINNED
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+spec:
+  containers:
+    - name: app
+      image: nginx:1.25
+      securityContext:
+        runAsNonRoot: true

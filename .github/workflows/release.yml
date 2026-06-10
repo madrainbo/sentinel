@@ -1,8 +1,13 @@
 name: release
 
-# On a version tag (e.g. v0.1.0), cross-compile the `sentinel` binary for each
-# target and attach archives + SHA-256 checksums to the GitHub Release. The CI
-# Action and local installers download these prebuilt binaries.
+# On a version tag (e.g. v0.1.0), create the GitHub Release, then cross-compile
+# the `sentinel` binary for each target and attach archives + SHA-256 checksums.
+# The CI Action and local installers download these prebuilt binaries.
+#
+# Note: taiki-e/upload-rust-binary-action only UPLOADS to an existing release —
+# it does not create one. The create-release job below must run first (the
+# upload matrix `needs:` it), otherwise every upload fails with "release not
+# found".
 
 on:
   push:
@@ -12,7 +17,17 @@ permissions:
   contents: write
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub Release for the tag
+        uses: taiki-e/create-gh-release-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   upload:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:

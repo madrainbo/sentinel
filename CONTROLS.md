@@ -28,11 +28,56 @@ mappings and their basis.
 | `CONTAINER-RUNS-AS-ROOT-OR-UNKNOWN` | Low | CWE-250 | 4.1 Run containers as a non-root user |
 | `WRITABLE-ROOT-FILESYSTEM` | Low | CWE-732 Incorrect Permission Assignment for Critical Resource | 5.12 Root filesystem mounted read-only |
 
+## CIS Kubernetes Benchmark (k8s pack)
+
+CIS references for the Kubernetes pack are section numbers from the **CIS Kubernetes
+Benchmark v1.10**, Section 5 (Policies). Numbers were verified against the
+[kube-bench](https://github.com/aquasecurity/kube-bench) `cis-1.10` config — the
+canonical open implementation. (Section 5.2 numbering shifted between benchmark
+versions; an earlier draft used the v1.6/1.7 numbers, which were off by one for most
+5.2.x checks — now corrected to v1.10.)
+
+| Rule | CIS Kubernetes v1.10 |
+|---|---|
+| `K8S-CLUSTER-ADMIN-BINDING` | 5.1.1 cluster-admin role only used where required |
+| `K8S-RBAC-SECRET-READ` | 5.1.2 Minimize access to secrets |
+| `K8S-RBAC-WILDCARD` | 5.1.3 Minimize wildcard use in Roles/ClusterRoles |
+| `K8S-AUTOMOUNT-SA-TOKEN` | 5.1.6 SA tokens only mounted where necessary |
+| `K8S-PRIVILEGED-CONTAINER` | 5.2.2 Minimize admission of privileged containers |
+| `K8S-HOST-PID` | 5.2.3 host process ID namespace |
+| `K8S-HOST-IPC` | 5.2.4 host IPC namespace |
+| `K8S-HOST-NETWORK` | 5.2.5 host network namespace |
+| `K8S-ALLOW-PRIVILEGE-ESCALATION` | 5.2.6 allowPrivilegeEscalation |
+| `K8S-CONTAINER-RUNS-AS-ROOT` | 5.2.7 root containers |
+| `K8S-CAP-ADD-ALL`, `K8S-DANGEROUS-CAPABILITY` | 5.2.9 added capabilities |
+| `K8S-HOSTPATH-MOUNT` | 5.2.12 HostPath volumes |
+| `K8S-SECCOMP-UNCONFINED` | 5.7.2 seccomp profile set to RuntimeDefault |
+
+Other K8s rules (`K8S-PRIVILEGED-*` reachability, `K8S-IMAGE-UNPINNED`,
+`K8S-SECRET-IN-MANIFEST`, `K8S-READONLY-ROOTFS-MISSING`, `K8S-ALLOW-PRIV-ESC-NOT-DISABLED`)
+are captured by CWE alone.
+
+## CWE-only packs (GitHub Actions, Terraform, secrets)
+
+These packs map to **CWE only** — no single CIS benchmark cleanly covers GitHub Actions
+workflow risks, Terraform/IaC misconfigurations, or leaked-credential detection, so a CWE
+mapping is the honest, framework-neutral classification. The full per-rule CWE list is in
+[RULES.md](RULES.md), which is generated from the engine's own catalog.
+
 ## Verification status
 
-- **CWE mappings: verified** against MITRE CWE. (Notably, `IMAGE-UNPINNED` maps to
-  **CWE-494** — pulling an image by mutable tag runs code without an integrity check;
-  pinning by digest is that check. An earlier draft used CWE-1104, which is about
-  *unmaintained* components and was incorrect.)
-- **CIS section numbers: standard v1.x identifiers**, cross-check against your licensed
-  CIS Docker Benchmark copy for the exact target version.
+- **CWE mappings: verified** against MITRE CWE across all six packs. The newer packs'
+  less-common CWEs were spot-checked live against cwe.mitre.org on 2026-06-09 and all
+  titles matched exactly: CWE-272 Least Privilege Violation, CWE-552 Files or Directories
+  Accessible to External Parties, CWE-693 Protection Mechanism Failure, CWE-829 Inclusion
+  of Functionality from Untrusted Control Sphere, CWE-1357 Reliance on Insufficiently
+  Trustworthy Component, CWE-522 Insufficiently Protected Credentials, CWE-311 Missing
+  Encryption of Sensitive Data, CWE-94 Improper Control of Generation of Code ('Code
+  Injection'), CWE-269 Improper Privilege Management, CWE-284 Improper Access Control.
+  (Notably, `IMAGE-UNPINNED` maps to **CWE-494** — pulling an image by mutable tag runs
+  code without an integrity check; pinning by digest is that check. An earlier draft used
+  CWE-1104, which is about *unmaintained* components and was incorrect.)
+- **CIS Docker Benchmark** (Docker Compose pack): standard v1.x section identifiers;
+  cross-check against your licensed CIS Docker Benchmark copy for the exact target version.
+- **CIS Kubernetes Benchmark v1.10** (k8s pack): **verified** against kube-bench `cis-1.10`;
+  corrected a prior off-by-one in the 5.2.x range.

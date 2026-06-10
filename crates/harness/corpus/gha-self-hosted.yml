@@ -1,0 +1,10 @@
+# Self-hosted runner on a workflow reachable by an untrusted trigger — a fork PR
+# could run code on the persistent runner. (Checkout uses the safe base ref.)
+# EXPECT: Medium GHA-SELF-HOSTED-RUNNER
+on:
+  pull_request_target:
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11

@@ -1,0 +1,19 @@
+# Shares all three host namespaces — breaks pod isolation from the node.
+# EXPECT: High K8S-HOST-NETWORK
+# EXPECT: High K8S-HOST-PID
+# EXPECT: High K8S-HOST-IPC
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      hostPID: true
+      hostIPC: true
+      containers:
+        - name: app
+          image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          securityContext:
+            runAsNonRoot: true

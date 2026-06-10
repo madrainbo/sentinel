@@ -1,12 +1,12 @@
-﻿name: "Sentinel â€” Compose security scan"
-description: "Scan a Docker Compose file for security misconfigurations. Downloads a pinned, prebuilt sentinel binary and runs it (same binary you run locally)."
+﻿name: "Sentinel â€” security scan"
+description: "Scan Docker Compose, Dockerfile, Kubernetes, GitHub Actions, Terraform, or config files for security misconfigurations. Downloads a pinned, prebuilt sentinel binary and runs it (same binary you run locally)."
 branding:
   icon: "shield"
   color: "blue"
 
 inputs:
   path:
-    description: "Path to the docker-compose file to scan (relative to the workspace)."
+    description: "Path to the file to scan, relative to the workspace (Compose, Dockerfile, K8s manifest, GitHub Actions workflow, Terraform, or any config; type is auto-detected)."
     required: true
   fail-on:
     description: "Exit non-zero if any finding is at or above this severity: critical|high|medium|low|info. Empty to never fail."

@@ -1,0 +1,21 @@
+# Cross-resource host-takeover path: 'web' is internet-reachable and depends on
+# 'worker', which is NOT exposed but mounts the Docker socket. The engine traces
+# web -> worker and flags that reaching the front door chains to host takeover.
+# EXPECT: Critical DOCKER-SOCKET-MOUNT
+# EXPECT: Critical REACHABLE-HOST-TAKEOVER
+# EXPECT: Low PORT-PUBLISHED-ALL-IFACES
+services:
+  web:
+    image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    user: "10001"
+    read_only: true
+    ports:
+      - "8080:80"
+    depends_on:
+      - worker
+  worker:
+    image: alpine@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    user: "10001"
+    read_only: true
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"

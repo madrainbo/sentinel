@@ -1,0 +1,13 @@
+# pwn-request: pull_request_target (privileged token + secrets) checks out the
+# attacker-controlled PR head and would build/run it.
+# EXPECT: Critical GHA-PWN-REQUEST
+on:
+  pull_request_target:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: make build

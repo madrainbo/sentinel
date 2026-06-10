@@ -14,3 +14,11 @@ compose-parser = { path = "../compose-parser" }
 pack-sentinel-core = { path = "../pack-sentinel-core" }
 dockerfile-parser = { path = "../dockerfile-parser" }
 pack-dockerfile-core = { path = "../pack-dockerfile-core" }
+k8s-parser = { path = "../k8s-parser" }
+pack-k8s-core = { path = "../pack-k8s-core" }
+gha-parser = { path = "../gha-parser" }
+pack-gha-core = { path = "../pack-gha-core" }
+terraform-parser = { path = "../terraform-parser" }
+pack-terraform-core = { path = "../pack-terraform-core" }
+secrets-parser = { path = "../secrets-parser" }
+pack-secrets-core = { path = "../pack-secrets-core" }

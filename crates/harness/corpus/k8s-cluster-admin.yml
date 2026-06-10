@@ -1,0 +1,14 @@
+# Binds the built-in cluster-admin superuser role to a service account.
+# EXPECT: Critical K8S-CLUSTER-ADMIN-BINDING
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: app-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: app
+    namespace: app

@@ -1,31 +1,46 @@
 # Sentinel
 
-**Deterministic security scanner for Docker Compose and Dockerfiles.** Point it at a
-`docker-compose.yml` or `Dockerfile` and get a reproducible list of security
-misconfigurations — exposed Docker sockets, default credentials, privileged
-containers, `curl | sh` in builds, unpinned images, and more.
+**Deterministic security scanner for your infrastructure configs.** Point it at a
+Docker Compose file, Dockerfile, Kubernetes manifest, GitHub Actions workflow,
+Terraform file, or `.env`/config — and get a reproducible list of security
+misconfigurations: exposed Docker sockets, default credentials, privileged
+containers, cluster-admin bindings, pwn-request workflows, open security groups,
+hardcoded keys, and more.
 
 > ### 🚀 [Try the live demo →](https://sentinel-engine-ggaj.onrender.com/)
-> Paste a Docker Compose file, Dockerfile, Kubernetes manifest, GitHub Actions
-> workflow, Terraform file, or `.env` and scan it **entirely in your browser**
-> (WebAssembly — nothing is uploaded). The demo runs the latest engine; the newer
-> scanners (Kubernetes, GitHub Actions, Terraform, secrets) land in this repo next.
+> Paste any supported config and scan it **entirely in your browser**
+> (WebAssembly — nothing is uploaded). Same engine as this CLI.
 
 - **Deterministic** — same input always produces the same findings and the same
   `report_digest` (a real SHA-256 over the normalized facts + engine/pack versions +
   verdict). No LLM, no flakiness, fully auditable.
-- **Private by design** — runs locally and in your CI. Your compose file is never
+- **Private by design** — runs locally and in your CI. Your config is never
   uploaded anywhere; the tool makes no network calls.
 - **CI-ready** — one exit code gates your pipeline; the same binary runs on your laptop.
 
-> ⚠️ **Early preview — actively developed.** This repo's CLI scans **Docker Compose**
-> and **Dockerfiles** today; Kubernetes manifests and more are on the way (already live
-> in the [demo](https://sentinel-engine-ggaj.onrender.com/)). There is **no stable
-> release yet** — build from source to try the CLI.
+> ⚠️ **Early preview — actively developed.** There is **no stable release yet** —
+> build from source to try the CLI. Prebuilt binaries and the GitHub Action arrive
+> with the first tagged release.
+
+## What it scans
+
+| Target | Rules | Highlights |
+|---|---|---|
+| **Docker Compose** | 23 | Docker-socket mounts, privileged containers, weak/default credentials, host namespaces, attack-path chains |
+| **Kubernetes** | 19 | privileged/hostPath, cluster-admin & wildcard RBAC, seccomp unconfined, reachable node-compromise chains |
+| **Dockerfile** | 8 | `curl \| sh`, disabled TLS verification, root user, build secrets, unpinned base images |
+| **Secrets / config** | 8 | AWS/GitHub/Stripe/Slack/SendGrid/Google keys, private keys, generic credentials |
+| **GitHub Actions** | 6 | pwn-request, script injection, write-all permissions, unpinned actions |
+| **Terraform** | 6 | open security groups, public S3 ACLs, IAM wildcards, plaintext secrets, unencrypted storage |
+
+**70 rules total** (64 default + 6 opt-in `--strict` hardening checks). Full
+per-rule reference — what each finds, why it matters, how to fix it — in
+**[RULES.md](RULES.md)** (generated from the engine itself; findings and SARIF
+deep-link into it). Control mappings (CWE, CIS): **[CONTROLS.md](CONTROLS.md)**.
 
 ## Install
 
-From source (Rust toolchain):
+From source (requires the [Rust toolchain](https://rustup.rs) and Git):
 
 ```sh
 cargo install --git https://github.com/madrainbo/sentinel sentinel
@@ -33,19 +48,22 @@ cargo install --git https://github.com/madrainbo/sentinel sentinel
 cargo install --path crates/cli
 ```
 
-Prebuilt binaries and a GitHub Action will be published with the first tagged release.
-
 ## Usage
 
 ```sh
-sentinel scan docker-compose.yml                  # human-readable findings
-sentinel scan Dockerfile                          # Dockerfiles too (auto-detected)
+sentinel scan docker-compose.yml                  # type auto-detected
+sentinel scan Dockerfile
+sentinel scan deployment.yaml                     # Kubernetes (multi-doc aware)
+sentinel scan .github/workflows/ci.yml            # GitHub Actions
+sentinel scan main.tf                             # Terraform (HCL)
+sentinel scan .env                                # secrets sweep
 cat docker-compose.yml | sentinel scan -          # read from stdin
-sentinel scan docker-compose.yml --format json    # machine-readable report
-sentinel scan docker-compose.yml --format sarif   # SARIF for GitHub code scanning
-sentinel scan docker-compose.yml --fail-on high   # exit 1 if any High/Critical (CI gate)
-sentinel scan docker-compose.yml --strict         # + best-practice hardening checks
-sentinel verify report.json docker-compose.yml    # re-check a saved report reproduces
+sentinel scan compose.yml --format json           # machine-readable report
+sentinel scan compose.yml --format sarif          # SARIF for GitHub code scanning
+sentinel scan compose.yml --fail-on high          # exit 1 on High/Critical (CI gate)
+sentinel scan compose.yml --strict                # + best-practice hardening checks
+sentinel verify report.json compose.yml           # re-check a saved report reproduces
+sentinel rules                                    # the full rule catalog as Markdown
 ```
 
 **SARIF** output drops findings straight into the GitHub Security tab:
@@ -74,38 +92,17 @@ Once the first version is tagged, a one-line Action will gate your pipeline:
 The Action downloads a pinned, checksum-verified prebuilt binary for the runner and
 runs the **same** `sentinel scan` you run locally — your CI never compiles anything.
 
-## What it checks (v0)
-
-| Rule | Severity | What it catches |
-|---|---|---|
-| `DOCKER-SOCKET-MOUNT` | Critical | `/var/run/docker.sock` mounted into a container (host root) |
-| `SENSITIVE-HOST-PATH-MOUNT` | Critical/High | bind mount of `/`, `/etc`, `/proc`, `/sys`, … |
-| `PRIVILEGED-CONTAINER` | Critical | `privileged: true` |
-| `DANGEROUS-CAPABILITY` | High | `cap_add` of SYS_ADMIN / NET_ADMIN / SYS_PTRACE / … |
-| `HOST-NETWORK-MODE` | High | `network_mode: host` |
-| `HOST-PID-NAMESPACE` / `HOST-IPC-NAMESPACE` | High | `pid: host` / `ipc: host` (namespace isolation loss) |
-| `WEAK-DEFAULT-CREDENTIAL` | High | secret-like env var set to a weak/default value |
-| `SECRET-IN-ENVIRONMENT` | Medium | secret-like env var with an inline literal value |
-| `SENSITIVE-PORT-PUBLISHED-ALL-IFACES` | Medium | datastore/admin port published on `0.0.0.0` |
-| `PORT-PUBLISHED-ALL-IFACES` | Low | any port published on all interfaces |
-| `IMAGE-UNPINNED` | Low | image not pinned by digest |
-| `CONTAINER-RUNS-AS-ROOT-OR-UNKNOWN` | Low | runs as root, or user unspecified |
-| `WRITABLE-ROOT-FILESYSTEM` | Low | `read_only` not set |
-
-> Full details for every rule — what it is, why it matters, and how to fix it — are in
-> the **[vulnerability reference (RULES.md)](RULES.md)**. Findings deep-link to it, and
-> SARIF results carry the per-rule `helpUri`. Control mappings: **[CONTROLS.md](CONTROLS.md)**.
-
 ## How it works
 
 ```
-docker-compose.yml  →  parser  →  fact model (entity/relation graph)
-                                      → rules engine → findings
-                                      → content-addressed report (SHA-256)
+config file  →  parser  →  fact model (entity/relation graph)
+                               → rules engine → findings (with source lines)
+                               → content-addressed report (SHA-256)
 ```
 
-The parser normalizes Compose into a technology-agnostic fact graph; rules are pure
-predicates over that graph; the report is hashed so it can be reproduced and verified.
+Each parser normalizes its format into a technology-agnostic fact graph; rules are
+pure predicates over that graph; the report is hashed so it can be reproduced and
+verified. Findings carry the source line(s) they came from.
 
 ## Build & test
 
@@ -114,6 +111,9 @@ cargo build --release
 cargo test --workspace
 cargo run -p harness        # eval harness: precision/recall over a labeled corpus
 ```
+
+The harness runs the engine over a labeled corpus (74 fixtures across all six
+formats) and gates CI on precision/recall 1.000 and per-fixture determinism.
 
 ## License
 

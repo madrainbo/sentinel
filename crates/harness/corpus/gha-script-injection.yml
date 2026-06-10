@@ -1,0 +1,10 @@
+# Script injection: an attacker-controlled issue title is interpolated straight
+# into the shell.
+# EXPECT: High GHA-SCRIPT-INJECTION
+on: issues
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "New issue ${{ github.event.issue.title }}"

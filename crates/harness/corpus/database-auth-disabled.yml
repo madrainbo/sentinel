@@ -1,0 +1,18 @@
+# Database images configured with authentication turned off entirely:
+# MySQL empty-password mode and Postgres trust auth. Anyone who reaches the
+# database connects with no credentials.
+# EXPECT: High DATABASE-AUTH-DISABLED
+# EXPECT: High DATABASE-AUTH-DISABLED
+services:
+  mysql:
+    image: mysql@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    user: "10001"
+    read_only: true
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+  postgres:
+    image: postgres@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    user: "10001"
+    read_only: true
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust

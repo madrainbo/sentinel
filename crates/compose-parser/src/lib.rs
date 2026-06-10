@@ -37,11 +37,17 @@ pub const SENSITIVE_PORTS: &[i64] =
 struct Builder {
     entities: Vec<Entity>,
     relations: Vec<Relation>,
+    /// node-path -> 1-based source line (for finding line references).
+    lines: BTreeMap<String, u32>,
 }
 
 impl Builder {
     fn entity(&mut self, e: Entity) {
         self.entities.push(e);
+    }
+    /// Source line for a node path (e.g. `services.web.ports[0]`), if known.
+    fn line(&self, path: &str) -> Option<u32> {
+        self.lines.get(path).copied()
     }
     fn relation(&mut self, kind: RelationKind, from: &str, to: &str) {
         self.relations.push(Relation {
@@ -73,10 +79,14 @@ pub fn parse(input: &str) -> FactModel {
 pub fn try_parse(input: &str) -> Result<FactModel, String> {
     // Tolerate a leading UTF-8 BOM (common from Windows editors).
     let input = input.strip_prefix('\u{feff}').unwrap_or(input);
+    // Reject oversized / alias-bomb input before the YAML loader materializes it.
+    fact_model::limits::check_input_size(input)?;
+    fact_model::limits::check_yaml_aliases(input)?;
     let input_hash = sha256_prefixed(input.as_bytes());
     let mut b = Builder {
         entities: Vec::new(),
         relations: Vec::new(),
+        lines: yaml_loc::line_index(input),
     };
 
     let docs = YamlLoader::load_from_str(input).map_err(|e| format!("invalid YAML: {e}"))?;
@@ -182,15 +192,27 @@ fn parse_service(b: &mut Builder, name: &str, svc: &Yaml) {
                 || !svc["deploy"]["resources"]["limits"]["memory"].is_badvalue(),
         ),
     );
+    // security profile disabled (seccomp/apparmor set to unconfined)
+    attrs.insert(
+        "seccomp_disabled".into(),
+        AttrValue::Bool(yaml_list_contains(&svc["security_opt"], "seccomp:unconfined")),
+    );
+    attrs.insert(
+        "apparmor_disabled".into(),
+        AttrValue::Bool(yaml_list_contains(&svc["security_opt"], "apparmor:unconfined")),
+    );
+    // user-namespace mode ("" = not set)
+    attrs.insert(
+        "userns_mode".into(),
+        AttrValue::Enum(svc["userns_mode"].as_str().unwrap_or("").to_string()),
+    );
 
+    let svc_line = b.line(&base);
     b.entity(Entity {
         id: svc_id.clone(),
         kind: EntityKind::Service,
         attributes: attrs,
-        provenance: Provenance {
-            source_path: base.clone(),
-            origin: Origin::Explicit,
-        },
+        provenance: Provenance::explicit(base.clone()).with_line(svc_line),
     });
 
     // image
@@ -218,14 +240,13 @@ fn parse_service(b: &mut Builder, name: &str, svc: &Yaml) {
                 let cid = format!("capability:{name}/{cap}");
                 let mut a = BTreeMap::new();
                 a.insert("cap".into(), AttrValue::Str(cap.to_string()));
+                let cap_path = format!("{base}.cap_add");
+                let cap_line = b.line(&cap_path).or(svc_line);
                 b.entity(Entity {
                     id: cid.clone(),
                     kind: EntityKind::Capability,
                     attributes: a,
-                    provenance: Provenance {
-                        source_path: format!("{base}.cap_add"),
-                        origin: Origin::Explicit,
-                    },
+                    provenance: Provenance::explicit(cap_path).with_line(cap_line),
                 });
                 b.relation(RelationKind::GrantsCapability, &svc_id, &cid);
             }
@@ -295,14 +316,13 @@ fn parse_image(b: &mut Builder, svc_id: &str, base: &str, img: &str) {
     };
     a.insert("digest_pinned".into(), AttrValue::Bool(digest_pinned));
 
+    let img_path = format!("{base}.image");
+    let img_line = b.line(&img_path).or_else(|| b.line(base));
     b.entity(Entity {
         id: id.clone(),
         kind: EntityKind::Image,
         attributes: a,
-        provenance: Provenance {
-            source_path: format!("{base}.image"),
-            origin: Origin::Explicit,
-        },
+        provenance: Provenance::explicit(img_path).with_line(img_line),
     });
     b.relation(RelationKind::Uses, svc_id, &id);
 }
@@ -390,18 +410,13 @@ fn emit_port(
     a.insert("host_ip".into(), AttrValue::Str(host_ip));
     a.insert("protocol".into(), AttrValue::Enum(proto));
 
+    let origin = if host_ip_default { Origin::Default } else { Origin::Explicit };
+    let port_line = b.line(path);
     b.entity(Entity {
         id: id.clone(),
         kind: EntityKind::PortBinding,
         attributes: a,
-        provenance: Provenance {
-            source_path: path.to_string(),
-            origin: if host_ip_default {
-                Origin::Default
-            } else {
-                Origin::Explicit
-            },
-        },
+        provenance: Provenance::new(path.to_string(), origin).with_line(port_line),
     });
     b.relation(RelationKind::Exposes, svc_id, &id);
 }
@@ -446,14 +461,12 @@ fn emit_volume(b: &mut Builder, svc: &str, svc_id: &str, path: &str, source: &st
     a.insert("target".into(), AttrValue::Str(target.to_string()));
     a.insert("read_only".into(), AttrValue::Bool(read_only));
 
+    let vol_line = b.line(path);
     b.entity(Entity {
         id: id.clone(),
         kind,
         attributes: a,
-        provenance: Provenance {
-            source_path: path.to_string(),
-            origin: Origin::Explicit,
-        },
+        provenance: Provenance::explicit(path.to_string()).with_line(vol_line),
     });
     b.relation(RelationKind::Mounts, svc_id, &id);
 }
@@ -476,6 +489,26 @@ fn is_secret_like(name: &str) -> bool {
     }
     let norm: String = upper.chars().filter(|c| *c != '_').collect();
     SECRET_NAME_FRAGMENTS.iter().any(|frag| norm.contains(frag))
+}
+
+/// Recognise well-known environment variables that explicitly turn OFF database
+/// authentication (empty-password / trust modes for the official + Bitnami
+/// images). These are not weak passwords — they remove the password entirely.
+fn env_disables_auth(name: &str, val: Option<&str>) -> bool {
+    let v = val.unwrap_or("").trim().to_lowercase();
+    let upper = name.to_uppercase();
+    let truthy = matches!(v.as_str(), "yes" | "true" | "1");
+    match upper.as_str() {
+        // MySQL / MariaDB / generic Bitnami "allow empty password" switches.
+        "MYSQL_ALLOW_EMPTY_PASSWORD"
+        | "MARIADB_ALLOW_EMPTY_PASSWORD"
+        | "MARIADB_ALLOW_EMPTY_ROOT_PASSWORD"
+        | "ALLOW_EMPTY_PASSWORD"
+        | "MONGODB_ALLOW_EMPTY_PASSWORD" => truthy,
+        // Postgres: `trust` authenticates every connection with no password.
+        "POSTGRES_HOST_AUTH_METHOD" => v == "trust",
+        _ => false,
+    }
 }
 
 fn parse_environment(b: &mut Builder, svc: &str, svc_id: &str, base: &str, env: &Yaml) {
@@ -503,7 +536,12 @@ fn parse_environment(b: &mut Builder, svc: &str, svc_id: &str, base: &str, env: 
     }
 
     for (name, val) in pairs {
-        let secret_like = is_secret_like(&name);
+        let disables_auth = env_disables_auth(&name, val.as_deref());
+        // An auth-disabling switch (e.g. MYSQL_ALLOW_EMPTY_PASSWORD) matches the
+        // PASSWORD fragment but is a boolean flag, not an inline secret — classify
+        // it normal so it's handled only by DATABASE-AUTH-DISABLED, not the
+        // secret-in-env / weak-credential rules.
+        let secret_like = is_secret_like(&name) && !disables_auth;
         // A "${...}" placeholder or absent value is a reference, not an inline literal.
         let has_inline = match &val {
             Some(v) => !(v.starts_with("${") || v.is_empty() && val.is_none()),
@@ -526,15 +564,15 @@ fn parse_environment(b: &mut Builder, svc: &str, svc_id: &str, base: &str, env: 
             "value_is_weak_default".into(),
             AttrValue::Bool(secret_like && weak && has_inline),
         );
+        a.insert("disables_auth".into(), AttrValue::Bool(disables_auth));
 
+        let env_path = format!("{base}.environment.{name}");
+        let env_line = b.line(&env_path).or_else(|| b.line(base));
         b.entity(Entity {
             id: id.clone(),
             kind: EntityKind::EnvVar,
             attributes: a,
-            provenance: Provenance {
-                source_path: format!("{base}.environment.{name}"),
-                origin: Origin::Explicit,
-            },
+            provenance: Provenance::explicit(env_path).with_line(env_line),
         });
         b.relation(RelationKind::Reads, svc_id, &id);
     }

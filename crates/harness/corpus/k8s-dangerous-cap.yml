@@ -1,0 +1,14 @@
+# Adds SYS_ADMIN — a near-root capability that enables container escape.
+# EXPECT: High K8S-DANGEROUS-CAPABILITY
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+spec:
+  containers:
+    - name: app
+      image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      securityContext:
+        runAsNonRoot: true
+        capabilities:
+          add: ["SYS_ADMIN"]

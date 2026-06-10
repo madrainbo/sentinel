@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 
 use fact_model::{
-    sha256_prefixed, AttrValue, Entity, EntityKind, FactModel, Origin, Provenance, Relation,
+    sha256_prefixed, AttrValue, Entity, EntityKind, FactModel, Provenance, Relation,
     RelationKind, SourceDescriptor,
 };
 
@@ -36,50 +36,55 @@ pub fn parse(input: &str) -> FactModel {
     let mut runs_as = "unknown".to_string(); // Docker default is root; "unknown" = no USER seen
     let mut stage_names: Vec<String> = Vec::new();
     let mut instr_n = 0usize;
+    let mut final_from_line: Option<u32> = None; // line of the final stage's FROM
 
-    for line in logical_lines(input) {
+    for (lineno, line) in logical_lines(input) {
         let (instr, args) = split_instruction(&line);
         match instr.to_uppercase().as_str() {
             "FROM" => {
                 runs_as = "unknown".to_string(); // USER resets at each stage
-                parse_from(&mut b, &stage_id, &args, &mut stage_names);
+                final_from_line = Some(lineno);
+                parse_from(&mut b, &stage_id, &args, &mut stage_names, lineno);
             }
             "USER" => {
                 runs_as = classify_user(&args);
             }
             "ADD" => {
                 if add_has_remote_src(&args) {
-                    add_instruction(&mut b, &stage_id, &mut instr_n, "ADD", "add_remote", &args);
+                    add_instruction(&mut b, &stage_id, &mut instr_n, "ADD", "add_remote", &args, lineno);
                 }
             }
             "RUN" => {
                 if is_curl_pipe(&args) {
-                    add_instruction(&mut b, &stage_id, &mut instr_n, "RUN", "curl_pipe", &args);
+                    add_instruction(&mut b, &stage_id, &mut instr_n, "RUN", "curl_pipe", &args, lineno);
                 }
                 if mentions_sudo(&args) {
-                    add_instruction(&mut b, &stage_id, &mut instr_n, "RUN", "sudo", &args);
+                    add_instruction(&mut b, &stage_id, &mut instr_n, "RUN", "sudo", &args, lineno);
+                }
+                if is_world_writable(&args) {
+                    add_instruction(&mut b, &stage_id, &mut instr_n, "RUN", "world_writable", &args, lineno);
+                }
+                if disables_tls_verification(&args) {
+                    add_instruction(&mut b, &stage_id, &mut instr_n, "RUN", "tls_disabled", &args, lineno);
                 }
             }
             "ENV" | "ARG" => {
                 if let Some(name) = secret_inline_name(&args) {
-                    add_instruction(&mut b, &stage_id, &mut instr_n, &instr.to_uppercase(), "secret", &name);
+                    add_instruction(&mut b, &stage_id, &mut instr_n, &instr.to_uppercase(), "secret", &name, lineno);
                 }
             }
             _ => {}
         }
     }
 
-    // Final stage entity.
+    // Final stage entity (points at the final stage's FROM line, if any).
     let mut attrs = BTreeMap::new();
     attrs.insert("runs_as".into(), AttrValue::Enum(runs_as));
     b.entities.push(Entity {
         id: stage_id,
         kind: EntityKind::Stage,
         attributes: attrs,
-        provenance: Provenance {
-            source_path: "Dockerfile".into(),
-            origin: Origin::Explicit,
-        },
+        provenance: Provenance::explicit("Dockerfile").with_line(final_from_line),
     });
 
     FactModel {
@@ -94,27 +99,34 @@ pub fn parse(input: &str) -> FactModel {
     }
 }
 
-/// Join line continuations (`\`), drop comments and blank lines.
-fn logical_lines(input: &str) -> Vec<String> {
+/// Join line continuations (`\`), drop comments and blank lines. Each entry is
+/// `(start_line, text)` where `start_line` is the 1-based physical line the
+/// (possibly continued) instruction begins on.
+fn logical_lines(input: &str) -> Vec<(u32, String)> {
     let mut out = Vec::new();
     let mut acc = String::new();
-    for raw in input.lines() {
+    let mut start: u32 = 0;
+    for (i, raw) in input.lines().enumerate() {
+        let lineno = (i + 1) as u32;
         let line = raw.trim_end();
         let trimmed = line.trim_start();
         if acc.is_empty() && (trimmed.is_empty() || trimmed.starts_with('#')) {
             continue;
+        }
+        if acc.is_empty() {
+            start = lineno; // first physical line of this logical instruction
         }
         if let Some(stripped) = line.strip_suffix('\\') {
             acc.push_str(stripped);
             acc.push(' ');
         } else {
             acc.push_str(line);
-            out.push(acc.trim().to_string());
+            out.push((start, acc.trim().to_string()));
             acc = String::new();
         }
     }
     if !acc.trim().is_empty() {
-        out.push(acc.trim().to_string());
+        out.push((start, acc.trim().to_string()));
     }
     out
 }
@@ -126,7 +138,7 @@ fn split_instruction(line: &str) -> (String, String) {
     }
 }
 
-fn parse_from(b: &mut Builder, stage_id: &str, args: &str, stage_names: &mut Vec<String>) {
+fn parse_from(b: &mut Builder, stage_id: &str, args: &str, stage_names: &mut Vec<String>, line: u32) {
     let mut toks = args.split_whitespace();
     let img_ref = match toks.next() {
         Some(r) => r,
@@ -159,10 +171,7 @@ fn parse_from(b: &mut Builder, stage_id: &str, args: &str, stage_names: &mut Vec
         id: id.clone(),
         kind: EntityKind::Image,
         attributes: a,
-        provenance: Provenance {
-            source_path: "FROM".into(),
-            origin: Origin::Explicit,
-        },
+        provenance: Provenance::explicit("FROM").with_line(Some(line)),
     });
     b.relations.push(Relation {
         kind: RelationKind::Uses,
@@ -221,6 +230,36 @@ fn mentions_sudo(args: &str) -> bool {
         .any(|t| t == "sudo")
 }
 
+/// `chmod 777` / `chmod -R 0777` / `chmod a+rwx` — makes files world-writable,
+/// so any user (or a compromised process) in the container can tamper with them.
+fn is_world_writable(args: &str) -> bool {
+    let lower = args.to_lowercase();
+    if !lower.contains("chmod") {
+        return false;
+    }
+    // numeric mode whose "other" digit grants write (2,3,6,7), e.g. 777/666/0777,
+    // or a symbolic mode that adds write-for-all/other (a+w, o+w, +w).
+    lower.split(|c: char| c.is_whitespace()).any(|t| {
+        let t = t.trim_start_matches('-');
+        (t.len() == 3 || t.len() == 4)
+            && t.bytes().all(|b| b.is_ascii_digit())
+            && matches!(t.bytes().last(), Some(b'2' | b'3' | b'6' | b'7'))
+    }) || lower.contains("a+w") || lower.contains("o+w") || lower.contains("+rwx")
+}
+
+/// `curl -k` / `curl --insecure` / `wget --no-check-certificate` — disables TLS
+/// certificate verification, opening the download to man-in-the-middle tampering.
+fn disables_tls_verification(args: &str) -> bool {
+    let lower = args.to_lowercase();
+    let fetches = lower.contains("curl") || lower.contains("wget");
+    if !fetches {
+        return false;
+    }
+    lower.contains("--insecure")
+        || lower.contains("--no-check-certificate")
+        || lower.split(|c: char| c.is_whitespace()).any(|t| t == "-k")
+}
+
 /// If an ENV/ARG sets a secret-like name to an inline literal, return the name.
 fn secret_inline_name(args: &str) -> Option<String> {
     // ENV KEY=VALUE or ENV KEY VALUE
@@ -246,7 +285,7 @@ fn secret_inline_name(args: &str) -> Option<String> {
     }
 }
 
-fn add_instruction(b: &mut Builder, stage_id: &str, n: &mut usize, instr: &str, flag: &str, detail: &str) {
+fn add_instruction(b: &mut Builder, stage_id: &str, n: &mut usize, instr: &str, flag: &str, detail: &str, line: u32) {
     *n += 1;
     let id = format!("instruction:{n}");
     let mut a = BTreeMap::new();
@@ -260,10 +299,7 @@ fn add_instruction(b: &mut Builder, stage_id: &str, n: &mut usize, instr: &str, 
         id: id.clone(),
         kind: EntityKind::Instruction,
         attributes: a,
-        provenance: Provenance {
-            source_path: instr.to_string(),
-            origin: Origin::Explicit,
-        },
+        provenance: Provenance::explicit(instr.to_string()).with_line(Some(line)),
     });
     b.relations.push(Relation {
         kind: RelationKind::Uses,

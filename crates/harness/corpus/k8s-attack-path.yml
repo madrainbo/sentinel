@@ -1,0 +1,35 @@
+# Cross-resource attack path: an external LoadBalancer Service routes (by
+# selector) to a Deployment whose container runs privileged. Reaching the
+# service chains to node takeover.
+# EXPECT: Critical K8S-PRIVILEGED-CONTAINER
+# EXPECT: Critical K8S-REACHABLE-NODE-COMPROMISE
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: prod
+spec:
+  type: LoadBalancer
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: prod
+spec:
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: app
+          image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          securityContext:
+            runAsNonRoot: true
+            privileged: true

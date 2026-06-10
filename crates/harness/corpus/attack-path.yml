@@ -1,0 +1,22 @@
+# Cross-resource attack path: 'web' is internet-reachable (0.0.0.0) and depends
+# on 'db', which is NOT exposed but uses a default credential. The engine should
+# trace web -> db and flag the reachable path to a weak credential — something a
+# per-resource scan misses.
+# EXPECT: High WEAK-DEFAULT-CREDENTIAL
+# EXPECT: High REACHABLE-WEAK-CREDENTIAL
+# EXPECT: Low PORT-PUBLISHED-ALL-IFACES
+services:
+  web:
+    image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    user: "10001"
+    read_only: true
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+  db:
+    image: postgres@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    user: "10001"
+    read_only: true
+    environment:
+      POSTGRES_PASSWORD: password

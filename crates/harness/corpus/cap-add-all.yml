@@ -1,0 +1,9 @@
+# cap_add: [ALL] grants every Linux capability — equivalent to privileged.
+# EXPECT: Critical CAP-ADD-ALL
+services:
+  app:
+    image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    user: "10001"
+    read_only: true
+    cap_add:
+      - ALL

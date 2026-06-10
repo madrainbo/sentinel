@@ -1,0 +1,9 @@
+# Disabling seccomp removes a kernel-hardening layer.
+# EXPECT: High SECURITY-PROFILE-DISABLED
+services:
+  app:
+    image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    user: "10001"
+    read_only: true
+    security_opt:
+      - seccomp:unconfined

@@ -1,0 +1,10 @@
+# ClusterRole granting all verbs on all resources — unrestricted cluster access.
+# EXPECT: Critical K8S-RBAC-WILDCARD
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: god-mode
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]

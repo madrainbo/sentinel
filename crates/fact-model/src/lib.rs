@@ -7,6 +7,8 @@
 //! function of the input (ADR 0001 D5/D6, ADR 0003).
 #![allow(dead_code)]
 
+pub mod limits;
+
 use std::collections::BTreeMap;
 
 /// Top-level fact model. Contains no timestamps or random ids so its canonical
@@ -58,6 +60,24 @@ pub enum EntityKind {
     Stage,
     /// A notable Dockerfile instruction flagged for risk (RUN/ADD/COPY/...).
     Instruction,
+    /// A Kubernetes workload controller (Deployment/Pod/StatefulSet/DaemonSet/Job/CronJob/...).
+    Workload,
+    /// A single container within a workload's pod template.
+    Container,
+    /// A Kubernetes RBAC Role or ClusterRole (a set of permission rules).
+    Role,
+    /// A Kubernetes RBAC RoleBinding or ClusterRoleBinding.
+    RoleBinding,
+    /// A Kubernetes ServiceAccount.
+    ServiceAccount,
+    /// A CI/CD workflow (e.g. a GitHub Actions workflow file).
+    Workflow,
+    /// A job within a workflow.
+    Job,
+    /// A single step within a job (a `uses:` action or a `run:` script).
+    Step,
+    /// An infrastructure-as-code resource (e.g. a Terraform `resource` block).
+    Resource,
 }
 
 impl EntityKind {
@@ -77,6 +97,15 @@ impl EntityKind {
             EntityKind::Host => "host",
             EntityKind::Stage => "stage",
             EntityKind::Instruction => "instruction",
+            EntityKind::Workload => "workload",
+            EntityKind::Container => "container",
+            EntityKind::Role => "role",
+            EntityKind::RoleBinding => "role_binding",
+            EntityKind::ServiceAccount => "service_account",
+            EntityKind::Workflow => "workflow",
+            EntityKind::Job => "job",
+            EntityKind::Step => "step",
+            EntityKind::Resource => "resource",
         }
     }
 }
@@ -158,6 +187,29 @@ impl AttrValue {
 pub struct Provenance {
     pub source_path: String,
     pub origin: Origin,
+    /// 1-based source line the entity was declared on, when the parser can
+    /// determine it. `None` = unknown. This is a UX/locator aid (surfaced in
+    /// findings and exports) and is deliberately NOT part of the hashed
+    /// canonical JSON, so reformatting a file never changes the report digest.
+    pub line: Option<u32>,
+}
+
+impl Provenance {
+    /// Provenance with an explicit (author-written) origin and no known line.
+    pub fn explicit(source_path: impl Into<String>) -> Self {
+        Self { source_path: source_path.into(), origin: Origin::Explicit, line: None }
+    }
+
+    /// Provenance with the given origin and no known line.
+    pub fn new(source_path: impl Into<String>, origin: Origin) -> Self {
+        Self { source_path: source_path.into(), origin, line: None }
+    }
+
+    /// Builder: attach a 1-based source line (no-op if `None`).
+    pub fn with_line(mut self, line: Option<u32>) -> Self {
+        self.line = line;
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

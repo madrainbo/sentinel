@@ -1,0 +1,8 @@
+# Host user namespace: container root maps to host root.
+# EXPECT: High HOST-USERNS-MODE
+services:
+  app:
+    image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    user: "10001"
+    read_only: true
+    userns_mode: host

@@ -17,3 +17,12 @@ jobs:
         run: cargo test --workspace --verbose
       - name: Eval harness (gate)
         run: cargo run -p harness
+
+      - name: RULES.md is in sync with the rule catalog
+        run: |
+          cargo run -q -p cli -- rules > RULES.md.gen
+          if ! diff -u RULES.md RULES.md.gen; then
+            echo "::error::RULES.md is stale. Regenerate with: cargo run -p cli -- rules > RULES.md"
+            exit 1
+          fi
+          rm RULES.md.gen

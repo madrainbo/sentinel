@@ -1,0 +1,18 @@
+# Multiple issues in one workflow: write-all token, pwn-request checkout of the
+# PR head, an unpinned third-party action, and an injected PR title.
+# EXPECT: Critical GHA-PWN-REQUEST
+# EXPECT: High GHA-SCRIPT-INJECTION
+# EXPECT: Medium GHA-BROAD-PERMISSIONS
+# EXPECT: Low GHA-UNPINNED-ACTION
+on:
+  pull_request_target:
+permissions: write-all
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: tj-actions/changed-files@v44
+      - run: echo "Building PR ${{ github.event.pull_request.title }}"

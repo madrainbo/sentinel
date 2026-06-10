@@ -1,0 +1,26 @@
+# Multi-hop attack path: internet-reachable 'web' -> 'api' -> 'db', and 'db' uses
+# a default credential. The engine traces the two-hop chain to the weak secret.
+# EXPECT: High WEAK-DEFAULT-CREDENTIAL
+# EXPECT: High REACHABLE-WEAK-CREDENTIAL
+# EXPECT: Low PORT-PUBLISHED-ALL-IFACES
+services:
+  web:
+    image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    user: "10001"
+    read_only: true
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+  api:
+    image: node@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    user: "10001"
+    read_only: true
+    depends_on:
+      - db
+  db:
+    image: postgres@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    user: "10001"
+    read_only: true
+    environment:
+      POSTGRES_PASSWORD: password

@@ -1,0 +1,19 @@
+# hostPath mount of the Docker socket — full control of the node's runtime.
+# EXPECT: Critical K8S-HOSTPATH-MOUNT
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+spec:
+  containers:
+    - name: app
+      image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      securityContext:
+        runAsNonRoot: true
+      volumeMounts:
+        - name: sock
+          mountPath: /var/run/docker.sock
+  volumes:
+    - name: sock
+      hostPath:
+        path: /var/run/docker.sock

@@ -2,11 +2,20 @@
 resolver = "2"
 members = [
     "crates/fact-model",
+    "crates/yaml-loc",
     "crates/engine",
     "crates/compose-parser",
     "crates/pack-sentinel-core",
     "crates/dockerfile-parser",
     "crates/pack-dockerfile-core",
+    "crates/k8s-parser",
+    "crates/pack-k8s-core",
+    "crates/gha-parser",
+    "crates/pack-gha-core",
+    "crates/terraform-parser",
+    "crates/pack-terraform-core",
+    "crates/secrets-parser",
+    "crates/pack-secrets-core",
     "crates/cli",
     "crates/harness",
 ]

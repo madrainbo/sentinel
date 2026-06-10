@@ -1,0 +1,13 @@
+# allowPrivilegeEscalation: true lets a process gain more privileges via setuid.
+# EXPECT: Medium K8S-ALLOW-PRIVILEGE-ESCALATION
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+spec:
+  containers:
+    - name: app
+      image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: true

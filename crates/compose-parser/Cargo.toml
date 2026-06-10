@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 fact-model = { path = "../fact-model" }
+yaml-loc = { path = "../yaml-loc" }
 yaml-rust2 = "0.11.0"

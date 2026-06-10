@@ -1,0 +1,8 @@
+[package]
+name = "pack-secrets-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fact-model = { path = "../fact-model" }
+engine = { path = "../engine" }

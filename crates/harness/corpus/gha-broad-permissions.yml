@@ -1,0 +1,9 @@
+# write-all gives the GITHUB_TOKEN write access to every scope.
+# EXPECT: Medium GHA-BROAD-PERMISSIONS
+on: push
+permissions: write-all
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make build

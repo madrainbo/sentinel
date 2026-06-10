@@ -14,23 +14,30 @@ use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
 
-use engine::{pack_version_hash, run_pack, Pack, ReportCore, Severity};
+use engine::{detect_input, pack_version_hash, run_pack, InputKind, Pack, ReportCore, Severity};
 use fact_model::FactModel;
 use pack_dockerfile_core::DockerfileCorePack;
+use pack_gha_core::GhaCorePack;
+use pack_k8s_core::K8sCorePack;
+use pack_secrets_core::SecretsCorePack;
 use pack_sentinel_core::SentinelCorePack;
+use pack_terraform_core::TerraformCorePack;
 
 const MIN_RECALL: f64 = 0.90;
 
-/// Pick parser + pack by fixture extension (.Dockerfile vs .yml).
+/// Pick parser + pack the same way the CLI/web do: filename hint + content
+/// (Kubernetes/GitHub-Actions/Compose fixtures all use `.yml`, so content decides).
 fn build(path: &Path, content: &str) -> (FactModel, Box<dyn Pack>) {
-    let is_dockerfile = path
-        .extension()
-        .map(|x| x.eq_ignore_ascii_case("dockerfile"))
-        .unwrap_or(false);
-    if is_dockerfile {
-        (dockerfile_parser::parse(content), Box::new(DockerfileCorePack::new()))
-    } else {
-        (compose_parser::parse(content), Box::new(SentinelCorePack::new()))
+    let name = path.to_string_lossy();
+    match detect_input(&name, content) {
+        InputKind::Dockerfile => {
+            (dockerfile_parser::parse(content), Box::new(DockerfileCorePack::new()))
+        }
+        InputKind::Kubernetes => (k8s_parser::parse(content), Box::new(K8sCorePack::new())),
+        InputKind::GithubActions => (gha_parser::parse(content), Box::new(GhaCorePack::new())),
+        InputKind::Terraform => (terraform_parser::parse(content), Box::new(TerraformCorePack::new())),
+        InputKind::Secrets => (secrets_parser::parse(content), Box::new(SecretsCorePack::new())),
+        InputKind::Compose => (compose_parser::parse(content), Box::new(SentinelCorePack::new())),
     }
 }
 
@@ -105,7 +112,9 @@ fn main() -> ExitCode {
             .filter_map(|e| e.ok().map(|e| e.path()))
             .filter(|p| {
                 p.extension()
-                    .map(|x| x == "yml" || x.eq_ignore_ascii_case("dockerfile"))
+                    .map(|x| {
+                        x == "yml" || x == "tf" || x == "env" || x.eq_ignore_ascii_case("dockerfile")
+                    })
                     .unwrap_or(false)
             })
             .collect(),

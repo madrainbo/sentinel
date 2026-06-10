@@ -1,0 +1,27 @@
+feat: full engine sync — Kubernetes, GitHub Actions, Terraform, secrets scanning
+
+Brings this repo up to the current engine: 6 scan targets, 70 rules
+(64 default + 6 --strict), line-referenced findings, input-DoS hardening.
+
+New crates: k8s-parser + pack-k8s-core (19 rules incl. RBAC + reachable
+node-compromise attack paths), gha-parser + pack-gha-core (6 rules incl.
+pwn-request + script injection), terraform-parser + pack-terraform-core
+(6 rules, real-world-validated HCL parsing), secrets-parser +
+pack-secrets-core (8 detectors, entropy-safe redaction), yaml-loc
+(document-aware line index — findings carry source lines in text/JSON/
+SARIF/Markdown output).
+
+Updated: engine (SARIF, findings_markdown, catalog_md/`sentinel rules`,
+attach_lines), CLI (multi-format auto-detection, rules subcommand),
+compose/dockerfile parsers (YAML merge-keys, long syntax, *_FILE fix),
+fact-model (input limits: size cap, YAML alias budget, HCL depth guard).
+
+Quality evidence (run in this tree before push): cargo build clean,
+48 unit tests pass, eval harness 74 fixtures / 105 labeled findings,
+precision 1.000 / recall 1.000, determinism 74/74, GATE PASS.
+
+Also: RULES.md regenerated from the engine (70 rules; CI checks drift),
+CONTROLS.md updated (CWE verified vs MITRE, K8s CIS vs kube-bench),
+release.yml gains the create-release job (uploads previously failed with
+"release not found"), action.yml downloads from this repo's releases,
+README rewritten for the 6-target reality.

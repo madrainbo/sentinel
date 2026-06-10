@@ -1,0 +1,8 @@
+# Third-party action pinned to a mutable tag instead of a commit SHA.
+# EXPECT: Low GHA-UNPINNED-ACTION
+on: push
+jobs:
+  changed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: tj-actions/changed-files@v44

@@ -1,0 +1,13 @@
+# Privileged container — full host device/kernel access.
+# EXPECT: Critical K8S-PRIVILEGED-CONTAINER
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+spec:
+  containers:
+    - name: app
+      image: nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      securityContext:
+        runAsNonRoot: true
+        privileged: true

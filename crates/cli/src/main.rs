@@ -10,10 +10,17 @@ use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use engine::{full_report_json, pack_version_hash, run_pack, sarif_json, Pack, ReportCore, Severity};
+use engine::{
+    detect_input, full_report_json, pack_version_hash, run_pack, sarif_json, InputKind, Pack,
+    ReportCore, Severity,
+};
 use fact_model::FactModel;
 use pack_dockerfile_core::DockerfileCorePack;
+use pack_gha_core::GhaCorePack;
+use pack_k8s_core::K8sCorePack;
+use pack_secrets_core::SecretsCorePack;
 use pack_sentinel_core::SentinelCorePack;
+use pack_terraform_core::TerraformCorePack;
 
 #[derive(Clone, Copy, ValueEnum)]
 enum InputType {
@@ -21,32 +28,11 @@ enum InputType {
     Auto,
     Compose,
     Dockerfile,
-}
-
-/// Detect the input type from the path and content.
-fn detect_type(path: &str, input: &str) -> InputType {
-    let base = path
-        .rsplit(|c| c == '/' || c == '\\')
-        .next()
-        .unwrap_or(path)
-        .to_lowercase();
-    if base == "dockerfile" || base.ends_with(".dockerfile") || base == "containerfile" {
-        return InputType::Dockerfile;
-    }
-    if base.ends_with(".yml") || base.ends_with(".yaml") {
-        return InputType::Compose;
-    }
-    for line in input.lines() {
-        let t = line.trim();
-        if t.is_empty() || t.starts_with('#') {
-            continue;
-        }
-        if t.len() >= 5 && t[..5].eq_ignore_ascii_case("from ") {
-            return InputType::Dockerfile;
-        }
-        break;
-    }
-    InputType::Compose
+    Kubernetes,
+    #[value(name = "github-actions")]
+    GithubActions,
+    Terraform,
+    Secrets,
 }
 
 /// Parse the input and pick the matching rule pack.
@@ -56,16 +42,40 @@ fn build_model_and_pack(
     path: &str,
     strict: bool,
 ) -> Result<(FactModel, Box<dyn Pack>), String> {
+    // Boundary size cap — covers every format uniformly, including the
+    // fail-open parsers (Dockerfile/Terraform/secrets) that don't return Result.
+    fact_model::limits::check_input_size(input)?;
     let resolved = match kind {
-        InputType::Auto => detect_type(path, input),
-        other => other,
+        InputType::Auto => detect_input(path, input),
+        InputType::Compose => InputKind::Compose,
+        InputType::Dockerfile => InputKind::Dockerfile,
+        InputType::Kubernetes => InputKind::Kubernetes,
+        InputType::GithubActions => InputKind::GithubActions,
+        InputType::Terraform => InputKind::Terraform,
+        InputType::Secrets => InputKind::Secrets,
     };
     match resolved {
-        InputType::Dockerfile => Ok((
+        InputKind::Dockerfile => Ok((
             dockerfile_parser::parse(input),
             Box::new(DockerfileCorePack::new()),
         )),
-        _ => Ok((
+        InputKind::Kubernetes => Ok((
+            k8s_parser::try_parse(input)?,
+            Box::new(K8sCorePack::with_options(strict)),
+        )),
+        InputKind::GithubActions => Ok((
+            gha_parser::try_parse(input)?,
+            Box::new(GhaCorePack::new()),
+        )),
+        InputKind::Terraform => Ok((
+            terraform_parser::parse(input),
+            Box::new(TerraformCorePack::new()),
+        )),
+        InputKind::Secrets => Ok((
+            secrets_parser::parse(input),
+            Box::new(SecretsCorePack::new()),
+        )),
+        InputKind::Compose => Ok((
             compose_parser::try_parse(input)?,
             Box::new(SentinelCorePack::with_options(strict)),
         )),
@@ -76,7 +86,7 @@ fn build_model_and_pack(
 #[command(
     name = "sentinel",
     version,
-    about = "Deterministic Docker Compose security scanner"
+    about = "Deterministic security scanner (Docker Compose, Dockerfile, Kubernetes, GitHub Actions, Terraform, secrets)"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -89,6 +99,15 @@ enum Command {
     Scan(ScanArgs),
     /// Re-check that a saved JSON report reproduces its digest for a compose file.
     Verify(VerifyArgs),
+    /// Print the full rule catalog as Markdown (the source of truth for RULES.md).
+    Rules(RulesArgs),
+}
+
+#[derive(Args)]
+struct RulesArgs {
+    /// Emit the catalog as JSON instead of Markdown.
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(Args)]
@@ -164,7 +183,31 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Scan(args) => scan(args),
         Command::Verify(args) => verify(args),
+        Command::Rules(args) => rules(args),
     }
+}
+
+/// Every shipped rule, in reader-friendly target order (compose → secrets).
+/// Order drives RULES.md section order only; rule ids are unique so anchors
+/// never collide.
+fn all_catalog() -> Vec<engine::RuleMeta> {
+    let mut metas = pack_sentinel_core::catalog();
+    metas.extend(pack_dockerfile_core::catalog());
+    metas.extend(pack_k8s_core::catalog());
+    metas.extend(pack_gha_core::catalog());
+    metas.extend(pack_terraform_core::catalog());
+    metas.extend(pack_secrets_core::catalog());
+    metas
+}
+
+fn rules(args: RulesArgs) -> ExitCode {
+    let metas = all_catalog();
+    if args.json {
+        println!("{}", engine::catalog_json(&metas).to_canonical_string());
+    } else {
+        print!("{}", engine::catalog_md(&metas));
+    }
+    ExitCode::SUCCESS
 }
 
 fn read_input(path: &str) -> Result<String, String> {
@@ -196,7 +239,10 @@ fn scan(args: ScanArgs) -> ExitCode {
         }
     };
 
-    let findings = run_pack(pack.as_ref(), &model);
+    let mut findings = run_pack(pack.as_ref(), &model);
+    // Attach source lines for text/SARIF output. Excluded from the hashed core,
+    // so the report digest is unaffected.
+    engine::attach_lines(&mut findings, &model);
     let verdict = pack.verdict(&findings);
 
     let core = ReportCore {
@@ -262,7 +308,12 @@ fn print_text(
         } else {
             println!("Findings ({}):", findings.len());
             for f in findings {
-                println!("  [{:<8}] {:<34} {}", f.severity.as_str(), f.rule_id, f.message);
+                let loc = match f.lines.as_slice() {
+                    [] => String::new(),
+                    [l] => format!("  (line {l})"),
+                    ls => format!("  (lines {})", ls.iter().map(|l| l.to_string()).collect::<Vec<_>>().join(", ")),
+                };
+                println!("  [{:<8}] {:<34} {}{loc}", f.severity.as_str(), f.rule_id, f.message);
                 println!("             fix: {}", f.remediation);
                 println!("             {} | {}", f.controls.join(", "), f.evidence.join(", "));
             }

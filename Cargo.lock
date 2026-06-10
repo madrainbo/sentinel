@@ -122,9 +122,17 @@ dependencies = [
  "dockerfile-parser",
  "engine",
  "fact-model",
+ "gha-parser",
+ "k8s-parser",
  "pack-dockerfile-core",
+ "pack-gha-core",
+ "pack-k8s-core",
+ "pack-secrets-core",
  "pack-sentinel-core",
+ "pack-terraform-core",
+ "secrets-parser",
  "serde_json",
+ "terraform-parser",
 ]
 
 [[package]]
@@ -138,6 +146,7 @@ name = "compose-parser"
 version = "0.1.0"
 dependencies = [
  "fact-model",
+ "yaml-loc",
  "yaml-rust2",
 ]
 
@@ -198,6 +207,7 @@ name = "fact-model"
 version = "0.1.0"
 dependencies = [
  "sha2",
+ "yaml-rust2",
 ]
 
 [[package]]
@@ -217,6 +227,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "gha-parser"
+version = "0.1.0"
+dependencies = [
+ "fact-model",
+ "yaml-loc",
+ "yaml-rust2",
+]
+
+[[package]]
 name = "harness"
 version = "0.1.0"
 dependencies = [
@@ -224,8 +243,16 @@ dependencies = [
  "dockerfile-parser",
  "engine",
  "fact-model",
+ "gha-parser",
+ "k8s-parser",
  "pack-dockerfile-core",
+ "pack-gha-core",
+ "pack-k8s-core",
+ "pack-secrets-core",
  "pack-sentinel-core",
+ "pack-terraform-core",
+ "secrets-parser",
+ "terraform-parser",
 ]
 
 [[package]]
@@ -265,6 +292,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "k8s-parser"
+version = "0.1.0"
+dependencies = [
+ "fact-model",
+ "yaml-loc",
+ "yaml-rust2",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -291,7 +327,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "pack-gha-core"
+version = "0.1.0"
+dependencies = [
+ "engine",
+ "fact-model",
+]
+
+[[package]]
+name = "pack-k8s-core"
+version = "0.1.0"
+dependencies = [
+ "engine",
+ "fact-model",
+ "k8s-parser",
+]
+
+[[package]]
+name = "pack-secrets-core"
+version = "0.1.0"
+dependencies = [
+ "engine",
+ "fact-model",
+]
+
+[[package]]
 name = "pack-sentinel-core"
+version = "0.1.0"
+dependencies = [
+ "engine",
+ "fact-model",
+]
+
+[[package]]
+name = "pack-terraform-core"
 version = "0.1.0"
 dependencies = [
  "engine",
@@ -314,6 +383,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41f2619966050689382d2b44f664f4bc593e129785a36d6ee376ddf37259b924"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "secrets-parser"
+version = "0.1.0"
+dependencies = [
+ "fact-model",
 ]
 
 [[package]]
@@ -387,6 +463,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "terraform-parser"
+version = "0.1.0"
+dependencies = [
+ "fact-model",
+]
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -423,6 +506,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
 dependencies = [
  "windows-link",
+]
+
+[[package]]
+name = "yaml-loc"
+version = "0.1.0"
+dependencies = [
+ "yaml-rust2",
 ]
 
 [[package]]
