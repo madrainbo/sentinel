@@ -1,7 +1,9 @@
 name: "Sentinel - security scan"
 description: "Deterministic security scanner for Docker Compose, Dockerfile, Kubernetes, GitHub Actions & Terraform configs."
 branding:
-  icon: "shield"
+  # GitHub's allowed branding icons are a Feather subset that excludes "shield";
+  # "lock" is the nearest security-relevant icon it permits.
+  icon: "lock"
   color: "blue"
 
 inputs:
